@@ -1,16 +1,34 @@
 [project]
 name = "cnfutures-session-timeline"
-version = "2026.9.19"
-description = "获取中国期货交易区间历史，任意天，任意品种"
+version = "2026.9.20"
+description = "获取中国期货交易区间历史，任意天和任意品种"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "myuan", email = "provefars@gmail.com" }
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = []
+keywords = ["futures", "trading session", "CTP", "China futures"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Natural Language :: Chinese (Simplified)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
 
-[project.scripts]
-cnfutures-session-timeline = "cnfutures_session_timeline:main"
+[project.urls]
+Homepage = "https://github.com/myuanz/cnfutures-session-timeline"
+Repository = "https://github.com/myuanz/cnfutures-session-timeline"
+Issues = "https://github.com/myuanz/cnfutures-session-timeline/issues"
 
 [build-system]
 requires = ["uv_build>=0.12.10,<0.13.0"]

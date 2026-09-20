@@ -1,10 +1,10 @@
 # cnfutures-session-timeline
 
-获取中国期货交易区间历史，任意天，任意品种. 使用场景: 
+获取中国期货交易区间历史，任意天和任意品种. 预期使用场景: 
 
 - 从 CTP tick 重建分钟数据
 
-库中的 csv 含我手工整理的所有 session 变动历史，如有新上线品种和有交易时间调整，我会更新 csv 并发布新版本.
+我手工整理了所有期货 session 变动历史，如有新上线品种或交易时间调整，我会发布新版本.
 
 ## 用例
 
@@ -29,8 +29,16 @@ st.resolve(20250908, 'EC')
 
 ```
 
+## 安装
+
+```bash
+uv add cnfutures-session-timeline
+# or use pip: 
+# pip install -U cnfutures-session-timeline
+```
+
 ## 发布历史
 
-### 2026.9.20
+### 2026.09.20
 
 初次发布，含至今所有品种
