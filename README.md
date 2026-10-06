@@ -19,6 +19,7 @@
   13:30 → 15:00
 
 > uvx cnfutures-session-timeline 20260928 AU --json
+{"template_name": "day-0900-1500", "periods": [{"start": "09:00:00", "end": "10:15:00"}, {"start": "10:30:00", "end": "11:30:00"}, {"start": "13:30:00", "end": "15:00:00"}], "reason": "节假日或额外休市取消前置夜盘", "effective_at": "2026-09-28"}
 ```
 
 ## Python API
