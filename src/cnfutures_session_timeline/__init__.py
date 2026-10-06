@@ -1,12 +1,14 @@
 import csv
 from bisect import bisect_right
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, time
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Literal, cast
+
+from .calendar import closure_reason, load_closures, night_date, parse_date, validate_date
 
 type SessionTemplateName = Literal[
     "day-0900-1500",   # 常规商品期货昼盘
@@ -66,7 +68,7 @@ class SessionEvent:
 
 @dataclass(frozen=True)
 class ResolvedSession:
-    template_name: SessionTemplateName
+    template_name: SessionTemplateName | Literal["closed"]
     periods: tuple[SessionPeriod, ...]
     reason: str
     effective_at: date
@@ -75,11 +77,17 @@ class ResolvedSession:
         period_str = ','.join(f'{p.start.strftime(f'%H%M')}~{p.end.strftime(f'%H%M')}' for p in self.periods)
         return f'ResolvedSession(periods=({period_str}), {self.reason} @ {self.effective_at})'
 
+SESSION_CSV = files("cnfutures_session_timeline").joinpath("future_session_events.csv")
+
+
 class SessionTimeline:
-    def __init__(self, events: tuple[SessionEvent, ...]) -> None:
+    def __init__(
+        self, events: tuple[SessionEvent, ...], *, closures: Mapping[tuple[str, date], str],
+    ) -> None:
         grouped: dict[str, list[SessionEvent]] = {}
         exchanges: dict[str, str] = {}
         seen: set[tuple[str, str, date]] = set()
+        self.closures = dict(closures)
         for event in events:
             existing_exchange = exchanges.setdefault(event.product, event.exchange)
             if existing_exchange != event.exchange:
@@ -95,7 +103,6 @@ class SessionTimeline:
                 )
             seen.add(event_key)
             grouped.setdefault(event.product, []).append(event)
-        self.exchanges = exchanges
         self.events = {
             key: tuple(sorted(values, key=lambda item: item.effective_trade_date))
             for key, values in grouped.items()
@@ -106,43 +113,41 @@ class SessionTimeline:
         }
 
     @classmethod
-    def load(cls, path: Traversable | Path | None = None) -> "SessionTimeline":
-        if path is None:
-            path = files("cnfutures_session_timeline").joinpath("future_session_events.csv")
+    def load(cls, path: Traversable | Path = SESSION_CSV) -> "SessionTimeline":
         with path.open("r", encoding="utf-8") as source:
-            return cls(cls._read_events(source))
+            return cls(cls._read_events(source), closures=load_closures())
 
     def resolve(
         self,
         trade_date: date | int | str,
         product: str,
-        exchange: str | None = None,
     ) -> ResolvedSession:
-        if not isinstance(trade_date, date):
-            trade_date_text = str(trade_date)
-            if len(trade_date_text) != 8:
-                raise ValueError(f"交易日应为 8 位 YYYYMMDD: {trade_date}")
-            trade_date = date.fromisoformat(trade_date_text)
+        '''按交易日解析实际时段，休市返回空区间，上市前报错。'''
+        trade_date = parse_date(trade_date)
+        validate_date(trade_date)
         product = product.upper()
         events = self.events.get(product)
         if events is None:
             raise KeyError(f"没有品种 {product} 的 Session 时间表")
-        expected_exchange = self.exchanges[product]
-        if exchange is not None and exchange.upper() != expected_exchange:
-            raise KeyError(
-                f"品种 {product} 属于交易所 {expected_exchange}，"
-                f"不是 {exchange.upper()}"
-            )
         index = bisect_right(self.dates[product], trade_date) - 1
         if index < 0:
             raise KeyError(f"品种 {product} 在 {trade_date} 尚未上市")
         event = events[index]
-        return ResolvedSession(
-            event.session,
-            SESSION_PERIODS[event.session],
-            event.reason,
-            event.effective_trade_date,
-        )
+        closed = closure_reason(trade_date, self.closures, event.exchange)
+        if closed:
+            return ResolvedSession("closed", (), closed, trade_date)
+
+        periods = SESSION_PERIODS[event.session]
+        if event.session.startswith("night-"):
+            if trade_date == self.dates[product][0]:
+                return ResolvedSession(
+                    "day-0900-1500", periods[1:], "上市首日无前置夜盘", trade_date,
+                )
+            if night_date(trade_date, self.closures, event.exchange) is None:
+                return ResolvedSession(
+                    "day-0900-1500", periods[1:], "节假日或额外休市取消前置夜盘", trade_date,
+                )
+        return ResolvedSession(event.session, periods, event.reason, event.effective_trade_date)
 
     @staticmethod
     def _read_events(source: Iterable[str]) -> tuple[SessionEvent, ...]:
@@ -152,21 +157,24 @@ class SessionTimeline:
             raise ValueError(f"Session CSV 列应为: {','.join(cols)}")
         result: list[SessionEvent] = []
         for line_number, row in enumerate(reader, start=2):
-            if None in row:
+            if None in row or None in row.values():
                 raise ValueError(f"Session CSV 第 {line_number} 行列数错误")
             session_text = row["session"].strip()
+            exchange = row["exchange"].strip().upper()
+            product = row["product"].strip().upper()
+            day = date.fromisoformat(row["effective_trade_date"].strip())
+            reason = row["reason"].strip()
+            if not reason:
+                raise ValueError(f"Session CSV 第 {line_number} 行缺少原因")
             if session_text not in SESSION_PERIODS:
                 raise ValueError(
                     f"Session CSV 第 {line_number} 行类型未知: {session_text}"
                 )
-            reason = row["reason"].strip()
-            if not reason:
-                raise ValueError(f"Session CSV 第 {line_number} 行缺少原因")
             result.append(SessionEvent(
-                row["exchange"].strip().upper(),
-                row["product"].strip().upper(),
-                date.fromisoformat(row["effective_trade_date"].strip()),
-                session_text,
+                exchange,
+                product,
+                day,
+                cast(SessionTemplateName, session_text),
                 reason,
             ))
         return tuple(result)

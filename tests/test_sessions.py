@@ -9,7 +9,7 @@ from cnfutures_session_timeline import SessionTimeline
 def test_resolves_product_session_timeline() -> None:
     timeline = SessionTimeline.load()
 
-    assert timeline.resolve(20141228, "A").template_name == "day-0900-1500"
+    assert timeline.resolve(20141226, "A").template_name == "day-0900-1500"
     assert timeline.resolve(20141229, "A").template_name == "night-2100-0230"
     assert timeline.resolve(20150511, "A").template_name == "night-2100-2330"
     assert timeline.resolve(20150928, "A").template_name == "day-0900-1500"
@@ -20,7 +20,7 @@ def test_resolves_product_session_timeline() -> None:
 
 
 def test_resolved_session_contains_periods_and_source_event() -> None:
-    session = SessionTimeline.load().resolve(date(2015, 1, 5), "au", "shfe")
+    session = SessionTimeline.load().resolve(date(2015, 1, 6), "au")
 
     assert session.template_name == "night-2100-0230"
     assert session.periods[0].start == time(21)
@@ -47,7 +47,7 @@ def test_csv_order_does_not_affect_timeline(tmp_path: Path) -> None:
 
     timeline = SessionTimeline.load(path)
 
-    assert timeline.resolve(20190601, "A").template_name == "day-0900-1500"
+    assert timeline.resolve(20190603, "A").template_name == "day-0900-1500"
     assert timeline.resolve(20200601, "A").template_name == "night-2100-2300"
 
 
@@ -77,18 +77,16 @@ def test_rejects_same_product_on_different_exchanges(tmp_path: Path) -> None:
         SessionTimeline.load(path)
 
 
-def test_unknown_product_pre_listing_date_and_wrong_exchange_fail() -> None:
+def test_unknown_product_and_pre_listing_date_fail() -> None:
     timeline = SessionTimeline.load()
 
     with pytest.raises(KeyError, match="没有品种 UNKNOWN"):
         timeline.resolve(20260101, "UNKNOWN")
     with pytest.raises(KeyError, match="尚未上市"):
         timeline.resolve(20080714, "A")
-    with pytest.raises(KeyError, match="品种 A 属于交易所 DCE，不是 SHFE"):
-        timeline.resolve(20260101, "A", "SHFE")
 
 
-@pytest.mark.parametrize("trade_date", [202601, "2026-01-01", "20260230"])
+@pytest.mark.parametrize("trade_date", [202601, "2026/01/01", "20260230"])
 def test_rejects_invalid_compact_date(trade_date: int | str) -> None:
     with pytest.raises(ValueError):
         SessionTimeline.load().resolve(trade_date, "A")
