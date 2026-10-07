@@ -8,7 +8,9 @@ from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Literal, cast
 
-from .calendar import closure_reason, load_closures, night_date, parse_date, validate_date
+from chinese_calendar.constants import Holiday
+
+from .calendar import ExtraClosure, holiday_closure, load_closures, night_extra_closure, night_holiday, parse_date, validate_date
 
 type SessionTemplateName = Literal[
     "day-0900-1500",   # 常规商品期货昼盘
@@ -67,22 +69,44 @@ class SessionEvent:
 
 
 @dataclass(frozen=True)
-class ResolvedSession:
-    template_name: SessionTemplateName | Literal["closed"]
-    periods: tuple[SessionPeriod, ...]
-    reason: str
-    effective_at: date
+class SessionTrim:
+    action: Literal["remove_night", "close"]
+    cause: Holiday | ExtraClosure | Literal["weekend", "listing_day"]
 
     def __repr__(self) -> str:
-        period_str = ','.join(f'{p.start.strftime(f'%H%M')}~{p.end.strftime(f'%H%M')}' for p in self.periods)
-        return f'ResolvedSession(periods=({period_str}), {self.reason} @ {self.effective_at})'
+        if self.cause == "listing_day":
+            return "上市首日无夜盘"
+        if isinstance(self.cause, Holiday):
+            reason = self.cause.chinese
+        elif isinstance(self.cause, ExtraClosure):
+            reason = self.cause.reason
+        else:
+            reason = "周末"
+        return f"{reason} 休市" if self.action == "close" else f"{reason} 后首个工作日无夜盘"
+
+
+@dataclass(frozen=True)
+class ResolvedSession:
+    periods: tuple[SessionPeriod, ...]
+    std_session_event: SessionEvent
+    '''最近一次公告指定的标准 session'''
+    trims: tuple[SessionTrim, ...] = ()
+    '''因节假日、政策、上市首日等原因造成的 session 缩减'''
+
+    def __repr__(self) -> str:
+        periods = ','.join(f'{p.start:%H%M}~{p.end:%H%M}' for p in self.periods)
+        event = self.std_session_event
+        description = f'{event.reason} @ {event.effective_trade_date}'
+        for trim in self.trims:
+            description += f'，{trim!r}'
+        return f'ResolvedSession(periods=({periods}), {description})'
 
 SESSION_CSV = files("cnfutures_session_timeline").joinpath("future_session_events.csv")
 
 
 class SessionTimeline:
     def __init__(
-        self, events: tuple[SessionEvent, ...], *, closures: Mapping[tuple[str, date], str],
+        self, events: tuple[SessionEvent, ...], *, closures: Mapping[tuple[str, date], ExtraClosure],
     ) -> None:
         grouped: dict[str, list[SessionEvent]] = {}
         exchanges: dict[str, str] = {}
@@ -133,21 +157,32 @@ class SessionTimeline:
         if index < 0:
             raise KeyError(f"品种 {product} 在 {trade_date} 尚未上市")
         event = events[index]
-        closed = closure_reason(trade_date, self.closures, event.exchange)
-        if closed:
-            return ResolvedSession("closed", (), closed, trade_date)
-
         periods = SESSION_PERIODS[event.session]
-        if event.session.startswith("night-"):
-            if trade_date == self.dates[product][0]:
-                return ResolvedSession(
-                    "day-0900-1500", periods[1:], "上市首日无前置夜盘", trade_date,
-                )
-            if night_date(trade_date, self.closures, event.exchange) is None:
-                return ResolvedSession(
-                    "day-0900-1500", periods[1:], "节假日或额外休市取消前置夜盘", trade_date,
-                )
-        return ResolvedSession(event.session, periods, event.reason, event.effective_trade_date)
+        trims: list[SessionTrim] = []
+
+        # 先按节假日、周末裁剪。
+        if closed := holiday_closure(trade_date):
+            periods = ()
+            trims.append(SessionTrim("close", closed))
+        elif event.session.startswith("night-"):
+            if holiday := night_holiday(trade_date):
+                periods = periods[1:]
+                trims.append(SessionTrim("remove_night", holiday))
+
+        # 再应用该交易所的额外休市，已移除的时段不重复裁剪。
+        if periods:
+            if extra := self.closures.get((event.exchange, trade_date)):
+                periods = ()
+                trims.append(SessionTrim("close", extra))
+            elif periods[0].start == time(21):
+                if extra := night_extra_closure(trade_date, self.closures, event.exchange):
+                    periods = periods[1:]
+                    trims.append(SessionTrim("remove_night", extra))
+
+        if periods and periods[0].start == time(21) and trade_date == self.dates[product][0]:
+            periods = periods[1:]
+            trims.append(SessionTrim("remove_night", "listing_day"))
+        return ResolvedSession(periods, event, tuple(trims))
 
     @staticmethod
     def _read_events(source: Iterable[str]) -> tuple[SessionEvent, ...]:

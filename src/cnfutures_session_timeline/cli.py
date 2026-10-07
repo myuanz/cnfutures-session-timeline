@@ -4,7 +4,9 @@ import sys
 from dataclasses import asdict
 from datetime import date, time
 
-from . import SessionTimeline
+from chinese_calendar.constants import Holiday
+
+from . import ExtraClosure, SessionTimeline
 from .calendar import parse_date
 
 
@@ -12,6 +14,8 @@ def _json_default(value: object) -> str:
     '''将日期、时间及 datetime 序列化为 ISO 8601 字符串。'''
     if isinstance(value, (date, time)):
         return value.isoformat()
+    if isinstance(value, Holiday):
+        return value.value
     raise TypeError(f"无法 JSON 序列化: {type(value).__name__}")
 
 
@@ -22,9 +26,11 @@ def main() -> None:
     parser.add_argument("product", help="品种代码，如 AU、IF；不接受合约代码")
     parser.add_argument("--json", action="store_true", help="输出 JSON，供程序调用")
     args = parser.parse_args()
+
+    product = args.product.upper()
     try:
         day = parse_date(args.date)
-        result = SessionTimeline.load().resolve(day, args.product)
+        result = SessionTimeline.load().resolve(day, product)
     except (ValueError, KeyError) as error:
         message = str(error.args[0])
         if args.json:
@@ -34,8 +40,23 @@ def main() -> None:
     if args.json:
         print(json.dumps(asdict(result), default=_json_default, ensure_ascii=False))
         return
-    print(f"{day} {args.product.upper()}（交易日口径，北京时间）")
-    print(f"{'交易' if result.periods else '不交易'}：{result.reason}")
+    event = result.std_session_event
+    heading = f"{day} {product}，`{event.reason} @ {event.effective_trade_date}`"
+    for trim in result.trims:
+        if trim.cause == "listing_day":
+            heading += "，上市首日无夜盘"
+            continue
+        if isinstance(trim.cause, Holiday):
+            reason = trim.cause.chinese
+        elif isinstance(trim.cause, ExtraClosure):
+            reason = trim.cause.reason
+        else:
+            reason = "周末"
+        if trim.action == "close":
+            heading += f"，`{reason}` 休市"
+        else:
+            heading += f"，`{reason}` 后首个工作日无夜盘"
+    print(heading)
     for period in result.periods:
         print(f"  {period.start:%H:%M} → {period.end:%H:%M}")
 

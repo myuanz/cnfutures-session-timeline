@@ -1,9 +1,11 @@
 import csv
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
+from typing import Literal
 
 from chinese_calendar.constants import Holiday, holidays
 
@@ -13,16 +15,23 @@ ONE_DAY = timedelta(days=1)
 EXCHANGES = frozenset({"SHFE", "INE", "DCE", "CZCE", "CFFEX", "GFEX"})
 
 CLOSURES_CSV = files("cnfutures_session_timeline").joinpath("extra_closures.csv")
-HOLIDAY_NAMES = {holiday.value: holiday.chinese for holiday in Holiday}
 
 
-def load_closures(path: Traversable | Path = CLOSURES_CSV) -> dict[tuple[str, date], str]:
+@dataclass(frozen=True)
+class ExtraClosure:
+    exchange: str
+    day: date
+    reason: str
+    '''extra_closures.csv 中的原始原因。'''
+
+
+def load_closures(path: Traversable | Path = CLOSURES_CSV) -> dict[tuple[str, date], ExtraClosure]:
     '''按交易所和日期读取额外休市记录。'''
     with path.open("r", encoding="utf-8") as source:
         reader = csv.DictReader(source)
         if reader.fieldnames != ["exchange", "date", "reason"]:
             raise ValueError("休市 CSV 列应为: exchange,date,reason")
-        closures: dict[tuple[str, date], str] = {}
+        closures: dict[tuple[str, date], ExtraClosure] = {}
         for line_number, row in enumerate(reader, start=2):
             if None in row or None in row.values():
                 raise ValueError(f"休市 CSV 第 {line_number} 行列数错误")
@@ -36,7 +45,7 @@ def load_closures(path: Traversable | Path = CLOSURES_CSV) -> dict[tuple[str, da
             key = exchange, day
             if key in closures:
                 raise ValueError(f"休市事件重复: {exchange} {day}")
-            closures[key] = reason
+            closures[key] = ExtraClosure(exchange, day, reason)
         return closures
 
 
@@ -59,22 +68,37 @@ def validate_date(day: date) -> None:
         raise ValueError(f"中国日历仅覆盖 {CALENDAR_START} 至 {CALENDAR_END}: {day}")
 
 
-def closure_reason(day: date, closures: Mapping[tuple[str, date], str], exchange: str) -> str | None:
-    '''期货休市原因，周末调休上班仍然休市。'''
+def holiday_closure(day: date) -> Holiday | Literal["weekend"] | None:
+    '''日历休市原因，周末调休上班仍然休市。'''
     validate_date(day)
     holiday = holidays.get(day)
-    return (HOLIDAY_NAMES[holiday] if holiday else None) or closures.get((exchange, day)) or (
-        "周末" if day.weekday() >= 5 else None
-    )
+    return Holiday(holiday) if holiday else "weekend" if day.weekday() >= 5 else None
 
 
-def night_date(day: date, closures: Mapping[tuple[str, date], str], exchange: str) -> date | None:
-    '''交易日前置夜盘的自然日；跨节假日时返回 None。'''
+def night_dates(day: date) -> Iterator[date]:
+    '''检查前置夜盘经过的日期，包含普通周末及之前的第一个工作日。'''
     previous = day - ONE_DAY
     while True:
         validate_date(previous)
-        if previous in holidays or (exchange, previous) in closures:
-            return None
+        yield previous
         if previous.weekday() < 5:
-            return previous
+            return
         previous -= ONE_DAY
+
+
+def night_holiday(day: date) -> Holiday | None:
+    '''取消前置夜盘的节假日；普通周末不影响夜盘。'''
+    for previous in night_dates(day):
+        if holiday := holidays.get(previous):
+            return Holiday(holiday)
+    return None
+
+
+def night_extra_closure(
+    day: date, closures: Mapping[tuple[str, date], ExtraClosure], exchange: str,
+) -> ExtraClosure | None:
+    '''取消前置夜盘的额外休市记录。'''
+    for previous in night_dates(day):
+        if closed := closures.get((exchange, previous)):
+            return closed
+    return None

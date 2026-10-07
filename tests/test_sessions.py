@@ -3,37 +3,37 @@ from pathlib import Path
 
 import pytest
 
-from cnfutures_session_timeline import SessionTimeline
+from cnfutures_session_timeline import COMMODITY_DAY, SessionTimeline
 
 
 def test_resolves_product_session_timeline() -> None:
     timeline = SessionTimeline.load()
 
-    assert timeline.resolve(20141226, "A").template_name == "day-0900-1500"
-    assert timeline.resolve(20141229, "A").template_name == "night-2100-0230"
-    assert timeline.resolve(20150511, "A").template_name == "night-2100-2330"
-    assert timeline.resolve(20150928, "A").template_name == "day-0900-1500"
-    assert timeline.resolve(20150929, "A").template_name == "night-2100-2330"
-    assert timeline.resolve(20190401, "A").template_name == "night-2100-2300"
-    assert timeline.resolve(20200204, "A").template_name == "day-0900-1500"
-    assert timeline.resolve(20200507, "A").template_name == "night-2100-2300"
+    assert timeline.resolve(20141226, "A").std_session_event.session == "day-0900-1500"
+    assert timeline.resolve(20141229, "A").std_session_event.session == "night-2100-0230"
+    assert timeline.resolve(20150511, "A").std_session_event.session == "night-2100-2330"
+    assert timeline.resolve(20150928, "A").periods == COMMODITY_DAY
+    assert timeline.resolve(20150929, "A").std_session_event.session == "night-2100-2330"
+    assert timeline.resolve(20190401, "A").std_session_event.session == "night-2100-2300"
+    assert timeline.resolve(20200204, "A").std_session_event.session == "day-0900-1500"
+    assert timeline.resolve(20200507, "A").std_session_event.session == "night-2100-2300"
 
 
 def test_resolved_session_contains_periods_and_source_event() -> None:
     session = SessionTimeline.load().resolve(date(2015, 1, 6), "au")
 
-    assert session.template_name == "night-2100-0230"
+    assert session.std_session_event.session == "night-2100-0230"
     assert session.periods[0].start == time(21)
     assert session.periods[0].end == time(2, 30)
-    assert session.effective_at == date(2013, 7, 8)
-    assert session.reason == "开通夜盘"
+    assert session.std_session_event.effective_trade_date == date(2013, 7, 8)
+    assert session.std_session_event.reason == "开通夜盘"
 
 
 def test_resolves_financial_future_schedule_change() -> None:
     timeline = SessionTimeline.load()
 
-    assert timeline.resolve("20151231", "IF").template_name == "day-0915-1515"
-    assert timeline.resolve("20160104", "IF").template_name == "day-0930-1500"
+    assert timeline.resolve("20151231", "IF").std_session_event.session == "day-0915-1515"
+    assert timeline.resolve("20160104", "IF").std_session_event.session == "day-0930-1500"
 
 
 def test_csv_order_does_not_affect_timeline(tmp_path: Path) -> None:
@@ -47,8 +47,8 @@ def test_csv_order_does_not_affect_timeline(tmp_path: Path) -> None:
 
     timeline = SessionTimeline.load(path)
 
-    assert timeline.resolve(20190603, "A").template_name == "day-0900-1500"
-    assert timeline.resolve(20200601, "A").template_name == "night-2100-2300"
+    assert timeline.resolve(20190603, "A").std_session_event.session == "day-0900-1500"
+    assert timeline.resolve(20200601, "A").std_session_event.session == "night-2100-2300"
 
 
 def test_rejects_duplicate_product_date(tmp_path: Path) -> None:
