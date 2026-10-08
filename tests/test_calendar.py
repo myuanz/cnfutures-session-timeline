@@ -86,6 +86,31 @@ def test_listing_and_night_launch(timeline: SessionTimeline) -> None:
     assert timeline.resolve(20130708, "AU").periods[0].start == time(21)
 
 
+def test_fuel_oil_delisting_and_relisting(timeline: SessionTimeline) -> None:
+    source_url = "https://www.shfe.com.cn/publicnotice/notice/201806/t20180626_793285.html"
+    assert timeline.resolve(20180626, "FU").periods == COMMODITY_DAY
+    for offset in range(19):
+        day = date(2018, 6, 27) + timedelta(days=offset)
+        result = timeline.resolve(day, "FU")
+        assert result.periods == ()
+        assert result.std_session_event.session == "delisted"
+        assert result.std_session_event.reason == "下架"
+        assert result.std_session_event.source_url == source_url
+        assert result.trims == ()
+
+    first = timeline.resolve(20180716, "FU")
+    assert first.periods == COMMODITY_DAY
+    assert first.std_session_event.effective_trade_date == date(2018, 7, 16)
+    assert first.std_session_event.reason == "上市"
+    assert first.std_session_event.session == "night-2100-2300"
+    assert first.std_session_event.source_url == source_url
+    assert first.trims == (SessionTrim("remove_night", "listing_day"),)
+    following = timeline.resolve(20180717, "FU")
+    assert following.periods[0].start == time(21)
+    assert following.periods[0].end == time(23)
+    assert following.trims == ()
+
+
 def test_financial_futures_keep_day_schedule(timeline: SessionTimeline) -> None:
     result = timeline.resolve(20260928, "IF")
     assert result.std_session_event.session == "day-0930-1500"
@@ -201,4 +226,6 @@ def test_resolve_matches_jq_calendar_2016_2026(timeline: SessionTimeline) -> Non
         for product, events in timeline.events.items():
             if day < events[0].effective_trade_date:
                 continue
-            assert bool(timeline.resolve(day, product).periods) == (day in trade_days), (day, product)
+            # JQ通用日历包含FU旧合约终止、新合约挂牌之间的工作日。
+            delisted = product == "FU" and date(2018, 6, 27) <= day < date(2018, 7, 16)
+            assert bool(timeline.resolve(day, product).periods) == (day in trade_days and not delisted), (day, product)

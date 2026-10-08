@@ -32,7 +32,7 @@ def test_closed_json_is_success() -> None:
         "periods": [],
         "std_session_event": {
             "exchange": "SHFE", "product": "CU", "effective_trade_date": "2020-05-07",
-            "session": "night-2100-0100", "reason": "恢复夜盘",
+            "session": "night-2100-0100", "reason": "COVID19夜盘暂停恢复", "source_url": "",
         },
         "trims": [{
             "action": "close",
@@ -50,7 +50,7 @@ def test_text_output() -> None:
     result = cli("20260929", "au")
     assert result.returncode == 0
     assert result.stdout == (
-        "2026-09-29 AU，`恢复夜盘 @ 2020-05-07`\n"
+        "2026-09-29 AU，`COVID19夜盘暂停恢复 @ 2020-05-07`\n"
         "  21:00 → 02:30\n"
         "  09:00 → 10:15\n"
         "  10:30 → 11:30\n"
@@ -61,18 +61,18 @@ def test_text_output() -> None:
 def test_closed_text_output() -> None:
     result = cli("20240209", "CU")
     assert result.returncode == 0
-    assert result.stdout == "2024-02-09 CU，`恢复夜盘 @ 2020-05-07`，`除夕日额外休市` 休市\n"
+    assert result.stdout == "2024-02-09 CU，`COVID19夜盘暂停恢复 @ 2020-05-07`，`除夕日额外休市` 休市\n"
 
 
 def test_holiday_text_output() -> None:
     for day in ["20260925", "20260926", "20260927"]:
         result = cli(day, "AU")
         assert result.returncode == 0
-        assert result.stdout == f"2026-09-{day[-2:]} AU，`恢复夜盘 @ 2020-05-07`，`中秋` 休市\n"
+        assert result.stdout == f"2026-09-{day[-2:]} AU，`COVID19夜盘暂停恢复 @ 2020-05-07`，`中秋` 休市\n"
     result = cli("20260928", "AU")
     assert result.returncode == 0
     assert result.stdout == (
-        "2026-09-28 AU，`恢复夜盘 @ 2020-05-07`，`中秋` 后首个工作日无夜盘\n"
+        "2026-09-28 AU，`COVID19夜盘暂停恢复 @ 2020-05-07`，`中秋` 后首个工作日无夜盘\n"
         "  09:00 → 10:15\n"
         "  10:30 → 11:30\n"
         "  13:30 → 15:00\n"

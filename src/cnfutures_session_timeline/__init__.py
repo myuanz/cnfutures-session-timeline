@@ -13,6 +13,7 @@ from chinese_calendar.constants import Holiday
 from .calendar import ExtraClosure, holiday_closure, load_closures, night_extra_closure, night_holiday, parse_date, validate_date
 
 type SessionTemplateName = Literal[
+    "delisted",        # 下架无交易
     "day-0900-1500",   # 常规商品期货昼盘
     "day-0915-1515",
     "day-0930-1500",   # 常规股指期货昼盘
@@ -39,6 +40,7 @@ COMMODITY_DAY = (
 )
 
 SESSION_PERIODS: dict[SessionTemplateName, tuple[SessionPeriod, ...]] = {
+    "delisted": (),
     "day-0900-1500": COMMODITY_DAY,
     "day-0915-1515": (
         SessionPeriod(time(9, 15), time(11, 30)),
@@ -66,6 +68,8 @@ class SessionEvent:
     effective_trade_date: date
     session: SessionTemplateName
     reason: str
+    source_url: str = ""
+    '''交易所公告链接，未整理时为空字符串'''
 
 
 @dataclass(frozen=True)
@@ -161,7 +165,7 @@ class SessionTimeline:
         trims: list[SessionTrim] = []
 
         # 先按节假日、周末裁剪。
-        if closed := holiday_closure(trade_date):
+        if periods and (closed := holiday_closure(trade_date)):
             periods = ()
             trims.append(SessionTrim("close", closed))
         elif event.session.startswith("night-"):
@@ -179,14 +183,18 @@ class SessionTimeline:
                     periods = periods[1:]
                     trims.append(SessionTrim("remove_night", extra))
 
-        if periods and periods[0].start == time(21) and trade_date == self.dates[product][0]:
+        if (
+            periods and periods[0].start == time(21)
+            and trade_date == event.effective_trade_date
+            and (index == 0 or event.reason == "上市")
+        ):
             periods = periods[1:]
             trims.append(SessionTrim("remove_night", "listing_day"))
         return ResolvedSession(periods, event, tuple(trims))
 
     @staticmethod
     def _read_events(source: Iterable[str]) -> tuple[SessionEvent, ...]:
-        cols = ["exchange", "product", "effective_trade_date", "session", "reason"]
+        cols = ["exchange", "product", "effective_trade_date", "session", "reason", "source_url"]
         reader = csv.DictReader(source)
         if reader.fieldnames != cols:
             raise ValueError(f"Session CSV 列应为: {','.join(cols)}")
@@ -211,5 +219,6 @@ class SessionTimeline:
                 day,
                 cast(SessionTemplateName, session_text),
                 reason,
+                row["source_url"].strip(),
             ))
         return tuple(result)

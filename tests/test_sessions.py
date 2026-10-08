@@ -39,9 +39,9 @@ def test_resolves_financial_future_schedule_change() -> None:
 def test_csv_order_does_not_affect_timeline(tmp_path: Path) -> None:
     path = tmp_path / "sessions.csv"
     path.write_text(
-        "exchange,product,effective_trade_date,session,reason\n"
-        "DCE,A,2020-01-02,night-2100-2300,恢复\n"
-        "DCE,A,2019-01-02,day-0900-1500,上市\n",
+        "exchange,product,effective_trade_date,session,reason,source_url\n"
+        "DCE,A,2020-01-02,night-2100-2300,恢复,\n"
+        "DCE,A,2019-01-02,day-0900-1500,上市,\n",
         encoding="utf-8",
     )
 
@@ -54,9 +54,9 @@ def test_csv_order_does_not_affect_timeline(tmp_path: Path) -> None:
 def test_rejects_duplicate_product_date(tmp_path: Path) -> None:
     path = tmp_path / "sessions.csv"
     path.write_text(
-        "exchange,product,effective_trade_date,session,reason\n"
-        "DCE,A,2020-01-02,day-0900-1500,上市\n"
-        "DCE,A,2020-01-02,night-2100-2300,恢复\n",
+        "exchange,product,effective_trade_date,session,reason,source_url\n"
+        "DCE,A,2020-01-02,day-0900-1500,上市,\n"
+        "DCE,A,2020-01-02,night-2100-2300,恢复,\n",
         encoding="utf-8",
     )
 
@@ -67,9 +67,9 @@ def test_rejects_duplicate_product_date(tmp_path: Path) -> None:
 def test_rejects_same_product_on_different_exchanges(tmp_path: Path) -> None:
     path = tmp_path / "sessions.csv"
     path.write_text(
-        "exchange,product,effective_trade_date,session,reason\n"
-        "DCE,A,2020-01-02,day-0900-1500,上市\n"
-        "SHFE,A,2020-01-03,day-0900-1500,上市\n",
+        "exchange,product,effective_trade_date,session,reason,source_url\n"
+        "DCE,A,2020-01-02,day-0900-1500,上市,\n"
+        "SHFE,A,2020-01-03,day-0900-1500,上市,\n",
         encoding="utf-8",
     )
 
