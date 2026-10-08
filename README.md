@@ -11,7 +11,7 @@
 ## Python API
 
 ```python
-from datetime import date
+from datetime import date, datetime
 from cnfutures_session_timeline import SessionTimeline
 
 st = SessionTimeline.load()
@@ -33,10 +33,17 @@ st.resolve(20200508, 'EC')
 st.resolve(20250908, 'EC')
 # ResolvedSession(periods=(0900~1015,1030~1130,1330~1500), 上市 @ 2023-08-18)
 
+st.trade_day_at(datetime.fromisoformat('2026-09-18T21:00:00+08:00'), 'AU')
+# datetime.date(2026, 9, 21)
+
+st.trade_day_at(datetime.fromisoformat('2026-09-19T10:00:00+08:00'), 'AU')
+# None
+
 ```
 
 ## Cli
 
+查询 session 区间：
 ```bash
 > uvx cnfutures-session-timeline 20260928 AU
 2026-09-28 AU，`COVID19夜盘暂停恢复 @ 2020-05-07`，`中秋` 后首个工作日无夜盘
@@ -46,6 +53,16 @@ st.resolve(20250908, 'EC')
 
 > uvx cnfutures-session-timeline 20260928 AU --json
 {"periods": [{"start": "09:00:00", "end": "10:15:00"}, {"start": "10:30:00", "end": "11:30:00"}, {"start": "13:30:00", "end": "15:00:00"}], "std_session_event": {"exchange": "SHFE", "product": "AU", "effective_trade_date": "2020-05-07", "session": "night-2100-0230", "reason": "COVID19夜盘暂停恢复", "source_url": ""}, "trims": [{"action": "remove_night", "cause": "Mid-autumn Festival"}]}
+```
+
+查询自然时间所属交易日：
+
+```bash
+uvx cnfutures-session-timeline --trade-day-at '2026-09-18T21:00:00+08:00' AU
+# 2026-09-21
+
+uvx cnfutures-session-timeline --trade-day-at '2026-09-19T10:00:00+08:00' AU --json
+# {"trade_day": null}
 ```
 
 ## 安装

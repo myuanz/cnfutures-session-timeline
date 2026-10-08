@@ -2,7 +2,7 @@ import csv
 from bisect import bisect_right
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import date, datetime, time, timedelta
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
@@ -10,7 +10,7 @@ from typing import Literal, cast
 
 from chinese_calendar.constants import Holiday
 
-from .calendar import ExtraClosure, holiday_closure, load_closures, night_extra_closure, night_holiday, parse_date, validate_date
+from .calendar import ONE_DAY, ExtraClosure, holiday_closure, load_closures, night_dates, night_extra_closure, night_holiday, parse_date, validate_date
 
 type SessionTemplateName = Literal[
     "delisted",        # 下架无交易
@@ -191,6 +191,34 @@ class SessionTimeline:
             periods = periods[1:]
             trims.append(SessionTrim("remove_night", "listing_day"))
         return ResolvedSession(periods, event, tuple(trims))
+
+    def trade_day_at(self, dt: datetime, product: str) -> date | None:
+        '''查询东八区自然时间所属的交易日，包含时段两端，非交易时段返回 None。'''
+        if not isinstance(dt, datetime) or dt.utcoffset() != timedelta(hours=8):
+            raise ValueError("请传入带东八区时区（UTC+08:00）的 datetime")
+        day = dt.date()
+        session = self.resolve(day, product)
+        candidates = [day]
+        # 夜盘及跨午夜时间还可能属于其后的交易日，周五夜盘属于周一。
+        if dt.time() >= time(21) or dt.time() <= time(2, 30):
+            next_day = day + ONE_DAY
+            while next_day.weekday() >= 5:
+                next_day += ONE_DAY
+            candidates.append(next_day)
+
+        for trade_day in candidates:
+            if trade_day != day:
+                session = self.resolve(trade_day, product)
+            for period in session.periods:
+                start_day = trade_day
+                if period.start == time(21):
+                    start_day = next(previous for previous in night_dates(trade_day) if previous.weekday() < 5)
+                end_day = start_day + ONE_DAY if period.end < period.start else start_day
+                start = datetime.combine(start_day, period.start, dt.tzinfo)
+                end = datetime.combine(end_day, period.end, dt.tzinfo)
+                if start <= dt <= end:
+                    return trade_day
+        return None
 
     @staticmethod
     def _read_events(source: Iterable[str]) -> tuple[SessionEvent, ...]:

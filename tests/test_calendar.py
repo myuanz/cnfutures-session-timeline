@@ -111,6 +111,18 @@ def test_fuel_oil_delisting_and_relisting(timeline: SessionTimeline) -> None:
     assert following.trims == ()
 
 
+def test_late_indica_rice_suspension(timeline: SessionTimeline) -> None:
+    assert timeline.resolve(20250124, "LR").periods == COMMODITY_DAY
+    for day in [20250127, 20250128, 20250205, 20261008]:
+        result = timeline.resolve(day, "LR")
+        assert result.periods == ()
+        assert result.std_session_event.session == "delisted"
+        assert result.std_session_event.reason == "暂停交易"
+        assert result.std_session_event.effective_trade_date == date(2025, 1, 27)
+        assert result.std_session_event.source_url == "https://www.bocifco.com/newsinfo.aspx?cid=3&id=49585"
+        assert result.trims == ()
+
+
 def test_financial_futures_keep_day_schedule(timeline: SessionTimeline) -> None:
     result = timeline.resolve(20260928, "IF")
     assert result.std_session_event.session == "day-0930-1500"
@@ -226,6 +238,9 @@ def test_resolve_matches_jq_calendar_2016_2026(timeline: SessionTimeline) -> Non
         for product, events in timeline.events.items():
             if day < events[0].effective_trade_date:
                 continue
-            # JQ通用日历包含FU旧合约终止、新合约挂牌之间的工作日。
-            delisted = product == "FU" and date(2018, 6, 27) <= day < date(2018, 7, 16)
+            # JQ通用日历包含品种下架、暂停交易期间的工作日。
+            delisted = (
+                product == "FU" and date(2018, 6, 27) <= day < date(2018, 7, 16)
+                or product == "LR" and day >= date(2025, 1, 27)
+            )
             assert bool(timeline.resolve(day, product).periods) == (day in trade_days and not delisted), (day, product)

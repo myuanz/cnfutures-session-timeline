@@ -108,3 +108,35 @@ def test_json_errors() -> None:
 def test_cli_requires_product_and_has_no_exchange_option() -> None:
     assert cli("20260928").returncode == 2
     assert cli("20260928", "AU", "--exchange", "SHFE").returncode == 2
+
+
+def test_trade_day_at_output() -> None:
+    result = cli("--trade-day-at", "2026-09-18T21:00:00+08:00", "AU")
+    assert result.returncode == 0
+    assert result.stdout == "2026-09-21\n"
+    assert result.stderr == ""
+    result = cli("--trade-day-at", "2026-09-18T21:00:00+08:00", "au", "--json")
+    assert result.returncode == 0
+    assert json.loads(result.stdout) == {"trade_day": "2026-09-21"}
+    result = cli("--trade-day-at", "2026-09-19T10:00:00+08:00", "AU")
+    assert result.returncode == 0
+    assert result.stdout == "None\n"
+    result = cli("--trade-day-at", "2026-09-19T10:00:00+08:00", "AU", "--json")
+    assert result.returncode == 0
+    assert json.loads(result.stdout) == {"trade_day": None}
+
+
+def test_trade_day_at_errors() -> None:
+    for args in [
+        ("--trade-day-at", "2026-09-18T21:00:00", "AU"),
+        ("--trade-day-at", "2026-09-18T13:00:00Z", "AU"),
+        ("--trade-day-at", "invalid", "AU"),
+        ("--trade-day-at", "2026-09-18T21:00:00+08:00", "UNKNOWN"),
+        ("--trade-day-at", "2027-01-01T09:00:00+08:00", "AU"),
+        ("20260918", "AU", "--trade-day-at", "2026-09-18T21:00:00+08:00"),
+        ("AU",),
+    ]:
+        result = cli(*args, "--json")
+        assert result.returncode == 2
+        assert result.stdout == ""
+        assert json.loads(result.stderr)["error"]
