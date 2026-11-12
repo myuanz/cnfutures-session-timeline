@@ -80,6 +80,10 @@ uv add cnfutures-session-timeline
 
 ## 发布历史
 
+### 2026.11.12
+
+添加葵花籽油
+
 ### 2026.10.09
 
 - 添加从 datetime 计算所在交易日功能
