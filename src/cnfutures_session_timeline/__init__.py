@@ -2,7 +2,7 @@ import csv
 from bisect import bisect_right
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, time
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path
@@ -10,7 +10,8 @@ from typing import Literal, cast
 
 from chinese_calendar.constants import Holiday
 
-from .calendar import ONE_DAY, ExtraClosure, holiday_closure, load_closures, night_dates, night_extra_closure, night_holiday, parse_date, validate_date
+from .dates import CalendarDate, TradeDate
+from .calendar import ONE_DAY, ExtraClosure, load_closures
 
 type SessionTemplateName = Literal[
     "delisted",        # 下架无交易
@@ -116,6 +117,12 @@ class SessionTimeline:
         exchanges: dict[str, str] = {}
         seen: set[tuple[str, str, date]] = set()
         self.closures = dict(closures)
+        self._night_closures: dict[tuple[str, date], ExtraClosure] = {}
+        for (exchange, day), closure in sorted(closures.items()):
+            following = day + ONE_DAY
+            while following.weekday() >= 5:
+                following += ONE_DAY
+            self._night_closures[exchange, following] = closure
         for event in events:
             existing_exchange = exchanges.setdefault(event.product, event.exchange)
             if existing_exchange != event.exchange:
@@ -147,29 +154,18 @@ class SessionTimeline:
 
     def resolve(
         self,
-        trade_date: date | int | str,
+        trade_date: TradeDate,
         product: str,
     ) -> ResolvedSession:
-        '''按交易日解析实际时段，休市返回空区间，上市前报错。'''
-        trade_date = parse_date(trade_date)
-        validate_date(trade_date)
-        product = product.upper()
-        events = self.events.get(product)
-        if events is None:
-            raise KeyError(f"没有品种 {product} 的 Session 时间表")
-        index = bisect_right(self.dates[product], trade_date) - 1
-        if index < 0:
-            raise KeyError(f"品种 {product} 在 {trade_date} 尚未上市")
-        event = events[index]
+        '''按日期解析品种时段，休市返回空区间及原因，上市前报错。'''
+        if not isinstance(trade_date, TradeDate):
+            raise TypeError("trade_date 必须是 TradeDate")
+        event = self._event_at(trade_date, product)
         periods = SESSION_PERIODS[event.session]
         trims: list[SessionTrim] = []
 
-        # 先按节假日、周末裁剪。
-        if periods and (closed := holiday_closure(trade_date)):
-            periods = ()
-            trims.append(SessionTrim("close", closed))
-        elif event.session.startswith("night-"):
-            if holiday := night_holiday(trade_date):
+        if event.session.startswith("night-"):
+            if holiday := trade_date.night_cancellation_holiday:
                 periods = periods[1:]
                 trims.append(SessionTrim("remove_night", holiday))
 
@@ -179,46 +175,28 @@ class SessionTimeline:
                 periods = ()
                 trims.append(SessionTrim("close", extra))
             elif periods[0].start == time(21):
-                if extra := night_extra_closure(trade_date, self.closures, event.exchange):
+                if extra := self._night_closures.get((event.exchange, trade_date)):
                     periods = periods[1:]
                     trims.append(SessionTrim("remove_night", extra))
 
         if (
             periods and periods[0].start == time(21)
             and trade_date == event.effective_trade_date
-            and (index == 0 or event.reason == "上市")
+            and (event == self.events[event.product][0] or event.reason == "上市")
         ):
             periods = periods[1:]
             trims.append(SessionTrim("remove_night", "listing_day"))
         return ResolvedSession(periods, event, tuple(trims))
 
-    def trade_day_at(self, dt: datetime, product: str) -> date | None:
-        '''查询东八区自然时间所属的交易日，包含时段两端，非交易时段返回 None。'''
-        if not isinstance(dt, datetime) or dt.utcoffset() != timedelta(hours=8):
-            raise ValueError("请传入带东八区时区（UTC+08:00）的 datetime")
-        day = dt.date()
-        session = self.resolve(day, product)
-        candidates = [day]
-        # 夜盘及跨午夜时间还可能属于其后的交易日，周五夜盘属于周一。
-        if dt.time() >= time(21) or dt.time() <= time(2, 30):
-            next_day = day + ONE_DAY
-            while next_day.weekday() >= 5:
-                next_day += ONE_DAY
-            candidates.append(next_day)
-
-        for trade_day in candidates:
-            if trade_day != day:
-                session = self.resolve(trade_day, product)
-            for period in session.periods:
-                start_day = trade_day
-                if period.start == time(21):
-                    start_day = next(previous for previous in night_dates(trade_day) if previous.weekday() < 5)
-                end_day = start_day + ONE_DAY if period.end < period.start else start_day
-                start = datetime.combine(start_day, period.start, dt.tzinfo)
-                end = datetime.combine(end_day, period.end, dt.tzinfo)
-                if start <= dt <= end:
-                    return trade_day
-        return None
+    def _event_at(self, day: date, product: str) -> SessionEvent:
+        product = product.upper()
+        events = self.events.get(product)
+        if events is None:
+            raise KeyError(f"没有品种 {product} 的 Session 时间表")
+        index = bisect_right(self.dates[product], day) - 1
+        if index < 0:
+            raise KeyError(f"品种 {product} 在 {day} 尚未上市")
+        return events[index]
 
     @staticmethod
     def _read_events(source: Iterable[str]) -> tuple[SessionEvent, ...]:

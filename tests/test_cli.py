@@ -4,7 +4,7 @@ import sys
 from dataclasses import asdict
 from datetime import timedelta
 
-from cnfutures_session_timeline import SessionTimeline
+from cnfutures_session_timeline import CalendarDate
 from cnfutures_session_timeline.cli import _json_default
 from cnfutures_session_timeline.calendar import CALENDAR_END
 
@@ -17,12 +17,12 @@ def cli(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_json_matches_resolve() -> None:
-    for day in ["20260921", "20240209", "20150928", "20260926", "20260920", "20250708"]:
+    for day in ["20260921", "20240209", "20150928", "20250708", "20260919", "20260925"]:
         result = cli(day, "AU", "--json")
         assert result.returncode == 0
         assert result.stderr == ""
         data = json.loads(result.stdout)
-        expected = json.loads(json.dumps(asdict(SessionTimeline.load().resolve(day, "AU")), default=_json_default))
+        expected = json.loads(json.dumps(asdict(CalendarDate.from_value(day).session("AU")), default=_json_default))
         assert data == expected
         assert list(data) == ["periods", "std_session_event", "trims"]
 
@@ -123,10 +123,10 @@ def test_trade_day_at_output() -> None:
     assert json.loads(result.stdout) == {"trade_day": "2026-09-21"}
     result = cli("--trade-day-at", "2026-09-19T10:00:00+08:00", "AU")
     assert result.returncode == 0
-    assert result.stdout == "None\n"
+    assert result.stdout == "2026-09-21\n"
     result = cli("--trade-day-at", "2026-09-19T10:00:00+08:00", "AU", "--json")
     assert result.returncode == 0
-    assert json.loads(result.stdout) == {"trade_day": None}
+    assert json.loads(result.stdout) == {"trade_day": "2026-09-21"}
 
 
 def test_trade_day_at_errors() -> None:
@@ -135,7 +135,6 @@ def test_trade_day_at_errors() -> None:
         ("--trade-day-at", "2026-09-18T21:00:00", "AU"),
         ("--trade-day-at", "2026-09-18T13:00:00Z", "AU"),
         ("--trade-day-at", "invalid", "AU"),
-        ("--trade-day-at", "2026-09-18T21:00:00+08:00", "UNKNOWN"),
         ("--trade-day-at", f"{outside_calendar}T09:00:00+08:00", "AU"),
         ("20260918", "AU", "--trade-day-at", "2026-09-18T21:00:00+08:00"),
         ("AU",),

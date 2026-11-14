@@ -6,8 +6,7 @@ from datetime import date, datetime, time
 
 from chinese_calendar.constants import Holiday
 
-from . import ExtraClosure, SessionTimeline
-from .calendar import parse_date
+from . import CalendarDate, ExtraClosure, TradeDate
 
 
 def _json_default(value: object) -> str:
@@ -34,7 +33,7 @@ def main() -> None:
             if args.date is not None:
                 raise ValueError("交易日与 --trade-day-at 不能同时传入")
             dt = datetime.fromisoformat(args.trade_day_at)
-            trade_day = SessionTimeline.load().trade_day_at(dt, product)
+            trade_day = TradeDate.from_value(dt)
             if args.json:
                 print(json.dumps({"trade_day": trade_day}, default=_json_default, ensure_ascii=False))
             else:
@@ -42,8 +41,8 @@ def main() -> None:
             return
         if args.date is None:
             raise ValueError("请传入交易日或使用 --trade-day-at 指定自然时间")
-        day = parse_date(args.date)
-        result = SessionTimeline.load().resolve(day, product)
+        day = CalendarDate.from_value(args.date)
+        result = day.session(product)
     except (ValueError, KeyError) as error:
         message = str(error.args[0])
         if args.json:

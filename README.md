@@ -11,35 +11,30 @@
 ## Python API
 
 ```python
-from datetime import date, datetime
-from cnfutures_session_timeline import SessionTimeline
+from datetime import datetime
+from cnfutures_session_timeline import CalendarDate, TradeDate
 
-st = SessionTimeline.load()
-
-st.resolve(date(2020, 3, 4), 'CU')
+day = TradeDate(2020, 3, 5)
+day.session("CU")  
 # ResolvedSession(periods=(0900~1015,1030~1130,1330~1500), COVID19暂停夜盘 @ 2020-02-04)
 
-st.resolve(20200508, 'CU')
-# ResolvedSession(periods=(2100~0100,0900~1015,1030~1130,1330~1500), COVID19夜盘暂停恢复 @ 2020-05-07)
+day.previous  # 上一个交易日 TradeDate(2020, 3, 4)
+day.next      # 下一个交易日 TradeDate(2020, 3, 6)
+day.next.next # 下下个交易日 TradeDate(2020, 3, 9)，跨越周末
 
-st.resolve(20260101, 'IC')
-# ResolvedSession(periods=(), 调整交易时间 @ 2016-01-04，元旦 休市)
+day.shift(5)  # 向未来挪动5交易日，next=shift(1), previour=shift(-1)
 
-st.resolve(20240209, 'CU')
-# ResolvedSession(periods=(), COVID19夜盘暂停恢复 @ 2020-05-07，除夕日额外休市 休市)
+CalendarDate(2026,6,12).as_trade_date() # 从日历日到交易日
 
-st.resolve(20200508, 'EC')
-# KeyError: '品种 EC 在 2020-05-08 尚未上市'
-st.resolve(20250908, 'EC')
-# ResolvedSession(periods=(0900~1015,1030~1130,1330~1500), 上市 @ 2023-08-18)
-
-st.trade_day_at(datetime.fromisoformat('2026-09-18T21:00:00+08:00'), 'AU')
-# datetime.date(2026, 9, 21)
-
-st.trade_day_at(datetime.fromisoformat('2026-09-19T10:00:00+08:00'), 'AU')
+TradeDate.from_value(datetime.fromisoformat("2026-09-18T17:00:00+08:00"), gap="previous") # 休市算上一天
+# TradeDate(2026, 9, 18)
+TradeDate.from_value(datetime.fromisoformat("2026-09-18T17:00:00+08:00"), gap="next")     # 休市算下一天
+# TradeDate(2026, 9, 21)
+TradeDate.from_value(datetime.fromisoformat("2026-09-18T17:00:00+08:00"), gap="none")     # 休市算 None
 # None
 
 ```
+
 
 ## Cli
 
@@ -62,7 +57,7 @@ uvx cnfutures-session-timeline --trade-day-at '2026-09-18T21:00:00+08:00' AU
 # 2026-09-21
 
 uvx cnfutures-session-timeline --trade-day-at '2026-09-19T10:00:00+08:00' AU --json
-# {"trade_day": null}
+# {"trade_day": "2026-09-21"}
 ```
 
 ## 安装
@@ -79,6 +74,10 @@ uv add cnfutures-session-timeline
 - `src/cnfutures_session_timeline/extra_closures.csv`：节假日之外的单日休市，目前只有 2024-02-09 的额外除夕休市
 
 ## 发布历史
+
+### 2026.11.14
+- 更新 2027 日历
+- 添加交易日导航相关 API
 
 ### 2026.11.12
 

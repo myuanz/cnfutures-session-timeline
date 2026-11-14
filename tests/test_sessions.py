@@ -1,3 +1,4 @@
+from cnfutures_session_timeline import CalendarDate, TradeDate
 from datetime import date, time
 from pathlib import Path
 
@@ -7,20 +8,19 @@ from cnfutures_session_timeline import COMMODITY_DAY, SessionTimeline
 
 
 def test_resolves_product_session_timeline() -> None:
-    timeline = SessionTimeline.load()
 
-    assert timeline.resolve(20141226, "A").std_session_event.session == "day-0900-1500"
-    assert timeline.resolve(20141229, "A").std_session_event.session == "night-2100-0230"
-    assert timeline.resolve(20150511, "A").std_session_event.session == "night-2100-2330"
-    assert timeline.resolve(20150928, "A").periods == COMMODITY_DAY
-    assert timeline.resolve(20150929, "A").std_session_event.session == "night-2100-2330"
-    assert timeline.resolve(20190401, "A").std_session_event.session == "night-2100-2300"
-    assert timeline.resolve(20200204, "A").std_session_event.session == "day-0900-1500"
-    assert timeline.resolve(20200507, "A").std_session_event.session == "night-2100-2300"
+    assert CalendarDate.from_value(20141226).session("A").std_session_event.session == "day-0900-1500"
+    assert CalendarDate.from_value(20141229).session("A").std_session_event.session == "night-2100-0230"
+    assert CalendarDate.from_value(20150511).session("A").std_session_event.session == "night-2100-2330"
+    assert CalendarDate.from_value(20150928).session("A").periods == COMMODITY_DAY
+    assert CalendarDate.from_value(20150929).session("A").std_session_event.session == "night-2100-2330"
+    assert CalendarDate.from_value(20190401).session("A").std_session_event.session == "night-2100-2300"
+    assert CalendarDate.from_value(20200204).session("A").std_session_event.session == "day-0900-1500"
+    assert CalendarDate.from_value(20200507).session("A").std_session_event.session == "night-2100-2300"
 
 
 def test_resolved_session_contains_periods_and_source_event() -> None:
-    session = SessionTimeline.load().resolve(date(2015, 1, 6), "au")
+    session = CalendarDate.from_value(date(2015, 1, 6)).session("au")
 
     assert session.std_session_event.session == "night-2100-0230"
     assert session.periods[0].start == time(21)
@@ -30,10 +30,9 @@ def test_resolved_session_contains_periods_and_source_event() -> None:
 
 
 def test_resolves_financial_future_schedule_change() -> None:
-    timeline = SessionTimeline.load()
 
-    assert timeline.resolve("20151231", "IF").std_session_event.session == "day-0915-1515"
-    assert timeline.resolve("20160104", "IF").std_session_event.session == "day-0930-1500"
+    assert CalendarDate.from_value("20151231").session("IF").std_session_event.session == "day-0915-1515"
+    assert CalendarDate.from_value("20160104").session("IF").std_session_event.session == "day-0930-1500"
 
 
 def test_csv_order_does_not_affect_timeline(tmp_path: Path) -> None:
@@ -47,8 +46,8 @@ def test_csv_order_does_not_affect_timeline(tmp_path: Path) -> None:
 
     timeline = SessionTimeline.load(path)
 
-    assert timeline.resolve(20190603, "A").std_session_event.session == "day-0900-1500"
-    assert timeline.resolve(20200601, "A").std_session_event.session == "night-2100-2300"
+    assert timeline.resolve(TradeDate.from_value(20190603), "A").std_session_event.session == "day-0900-1500"
+    assert timeline.resolve(TradeDate.from_value(20200601), "A").std_session_event.session == "night-2100-2300"
 
 
 def test_rejects_duplicate_product_date(tmp_path: Path) -> None:
@@ -78,15 +77,14 @@ def test_rejects_same_product_on_different_exchanges(tmp_path: Path) -> None:
 
 
 def test_unknown_product_and_pre_listing_date_fail() -> None:
-    timeline = SessionTimeline.load()
 
     with pytest.raises(KeyError, match="没有品种 UNKNOWN"):
-        timeline.resolve(20260101, "UNKNOWN")
+        CalendarDate.from_value(20260105).session("UNKNOWN")
     with pytest.raises(KeyError, match="尚未上市"):
-        timeline.resolve(20080714, "A")
+        CalendarDate.from_value(20080714).session("A")
 
 
 @pytest.mark.parametrize("trade_date", [202601, "2026/01/01", "20260230"])
 def test_rejects_invalid_compact_date(trade_date: int | str) -> None:
     with pytest.raises(ValueError):
-        SessionTimeline.load().resolve(trade_date, "A")
+        CalendarDate.from_value(trade_date).session("A")
