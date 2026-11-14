@@ -2,9 +2,11 @@ import json
 import subprocess
 import sys
 from dataclasses import asdict
+from datetime import timedelta
 
 from cnfutures_session_timeline import SessionTimeline
 from cnfutures_session_timeline.cli import _json_default
+from cnfutures_session_timeline.calendar import CALENDAR_END
 
 
 def cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -98,7 +100,8 @@ def test_listing_day_text_output() -> None:
 
 
 def test_json_errors() -> None:
-    for args in [("20270101", "AU"), ("20260230", "AU"), ("20260928", "UNKNOWN"), ("20250707", "BZ")]:
+    outside_calendar = CALENDAR_END + timedelta(days=1)
+    for args in [(outside_calendar.isoformat(), "AU"), ("20260230", "AU"), ("20260928", "UNKNOWN"), ("20250707", "BZ")]:
         result = cli(*args, "--json")
         assert result.returncode == 2
         assert result.stdout == ""
@@ -127,12 +130,13 @@ def test_trade_day_at_output() -> None:
 
 
 def test_trade_day_at_errors() -> None:
+    outside_calendar = CALENDAR_END + timedelta(days=1)
     for args in [
         ("--trade-day-at", "2026-09-18T21:00:00", "AU"),
         ("--trade-day-at", "2026-09-18T13:00:00Z", "AU"),
         ("--trade-day-at", "invalid", "AU"),
         ("--trade-day-at", "2026-09-18T21:00:00+08:00", "UNKNOWN"),
-        ("--trade-day-at", "2027-01-01T09:00:00+08:00", "AU"),
+        ("--trade-day-at", f"{outside_calendar}T09:00:00+08:00", "AU"),
         ("20260918", "AU", "--trade-day-at", "2026-09-18T21:00:00+08:00"),
         ("AU",),
     ]:

@@ -20,6 +20,18 @@ def timeline() -> SessionTimeline:
     (20200131, "CU", SessionTrim("close", Holiday.spring_festival)),
     (20260927, "AU", SessionTrim("close", Holiday.mid_autumn_festival)),
     (20260920, "AU", SessionTrim("close", "weekend")),
+    (20270101, "AU", SessionTrim("close", Holiday.new_years_day)),
+    (20270205, "AU", SessionTrim("close", Holiday.spring_festival)),
+    (20270405, "AU", SessionTrim("close", Holiday.tomb_sweeping_day)),
+    (20270503, "AU", SessionTrim("close", Holiday.labour_day)),
+    (20270609, "AU", SessionTrim("close", Holiday.dragon_boat_festival)),
+    (20270915, "AU", SessionTrim("close", Holiday.mid_autumn_festival)),
+    (20271001, "AU", SessionTrim("close", Holiday.national_day)),
+    (20270131, "AU", SessionTrim("close", "weekend")),
+    (20270214, "AU", SessionTrim("close", "weekend")),
+    (20270508, "AU", SessionTrim("close", "weekend")),
+    (20270926, "AU", SessionTrim("close", "weekend")),
+    (20271009, "AU", SessionTrim("close", "weekend")),
 ])
 def test_closed_day(timeline: SessionTimeline, day: int, product: str, trim: SessionTrim) -> None:
     result = timeline.resolve(day, product)
@@ -44,6 +56,13 @@ def test_extra_closure(timeline: SessionTimeline, product: str) -> None:
     (20260928, Holiday.mid_autumn_festival),
     (20261008, Holiday.national_day),
     (20200102, Holiday.new_years_day),
+    (20270104, Holiday.new_years_day),
+    (20270215, Holiday.spring_festival),
+    (20270406, Holiday.tomb_sweeping_day),
+    (20270506, Holiday.labour_day),
+    (20270610, Holiday.dragon_boat_festival),
+    (20270916, Holiday.mid_autumn_festival),
+    (20271008, Holiday.national_day),
 ])
 def test_first_day_after_holiday_has_no_night(timeline: SessionTimeline, day: int, holiday: Holiday) -> None:
     result = timeline.resolve(day, "AU")
@@ -52,7 +71,10 @@ def test_first_day_after_holiday_has_no_night(timeline: SessionTimeline, day: in
     assert result.trims == (SessionTrim("remove_night", holiday),)
 
 
-@pytest.mark.parametrize("day", [20150929, 20260921, 20260924])
+@pytest.mark.parametrize("day", [
+    20150929, 20260921, 20260924,
+    20270105, 20270216, 20270407, 20270507, 20270611, 20270917, 20271011,
+])
 def test_regular_night_and_last_day_before_holiday(timeline: SessionTimeline, day: int) -> None:
     result = timeline.resolve(day, "au")
     assert result.std_session_event.session == "night-2100-0230"
