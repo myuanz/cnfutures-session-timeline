@@ -30,9 +30,11 @@ class _DateInfo:
 
 
 def _build_date_index() -> tuple[tuple[date, ...], tuple[_DateInfo, ...]]:
+    # 2024 年除夕全市场休市，补入交易日使用的春节假期。
+    trading_holidays = holidays | {date(2024, 2, 9): Holiday.spring_festival.value}
     days = tuple(CALENDAR_START + i * ONE_DAY for i in range((CALENDAR_END - CALENDAR_START).days + 1))
     closures: tuple[Holiday | Literal["weekend"] | None, ...] = tuple(
-        Holiday(holidays[day]) if day in holidays else "weekend" if day.weekday() >= 5 else None
+        Holiday(trading_holidays[day]) if day in trading_holidays else "weekend" if day.weekday() >= 5 else None
         for day in days
     )
     trade_days = tuple(day for day, closed in zip(days, closures) if closed is None)
@@ -42,7 +44,7 @@ def _build_date_index() -> tuple[tuple[date, ...], tuple[_DateInfo, ...]]:
         for day in trade_days
     }
     night_holidays = {
-        day: next((Holiday(holidays[previous]) for previous in checks if previous in holidays), None)
+        day: next((Holiday(trading_holidays[previous]) for previous in checks if previous in trading_holidays), None)
         for day, checks in night_checks.items()
     }
 
@@ -86,8 +88,10 @@ class CalendarDate(date):
 
         if (closed := TradeDate.closure_on(self)) is None:
             return TradeDate(self.year, self.month, self.day).session(product)
-        event = _default_timeline()._event_at(self, product)
-        trims = () if event.session == "delisted" else (SessionTrim("close", closed),)
+        timeline = _default_timeline()
+        event = timeline._event_at(self, product)
+        cause = timeline.closures.get((event.exchange, self), closed)
+        trims = () if event.session == "delisted" else (SessionTrim("close", cause),)
         return ResolvedSession((), event, trims)
 
 

@@ -26,6 +26,10 @@ def test_date_conversion(value):
     ("2026-09-24T21:00:00+08:00", None),
     ("2026-09-25T10:00:00+08:00", None),
     ("2026-09-28T00:00:00+08:00", date(2026, 9, 28)),
+    ("2024-02-08T21:00:00+08:00", None),
+    ("2024-02-09T00:00:00+08:00", None),
+    ("2024-02-09T09:00:00+08:00", None),
+    ("2024-02-09T21:00:00+08:00", None),
 ])
 def test_datetime_conversion(text, expected):
     result = TradeDate.from_value(datetime.fromisoformat(text))
@@ -38,6 +42,7 @@ def test_datetime_conversion(text, expected):
     ("2026-09-18T17:00:00+08:00", 20260918, 20260921),
     ("2026-09-19T17:00:00+08:00", 20260918, 20260921),
     ("2026-09-25T17:00:00+08:00", 20260924, 20260928),
+    ("2024-02-09T17:00:00+08:00", 20240208, 20240219),
 ])
 def test_gap(text, previous, following):
     dt = datetime.fromisoformat(text)

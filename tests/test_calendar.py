@@ -173,9 +173,11 @@ def test_invalid_closure_csv(tmp_path: Path, content: str, message: str) -> None
 
 def test_constructor_uses_only_supplied_closures(timeline: SessionTimeline) -> None:
     events = tuple(event for group in timeline.events.values() for event in group)
-    custom = SessionTimeline(events, closures={})
-    assert custom.resolve(TradeDate.from_value(20240209), "AU").periods
-    assert not CalendarDate.from_value(20240209).session("AU").periods
+    day = TradeDate(2026, 9, 22)
+    extra = ExtraClosure("SHFE", day, "临时休市")
+    custom = SessionTimeline(events, closures={(extra.exchange, day): extra})
+    assert custom.resolve(day, "AU").periods == ()
+    assert SessionTimeline(events, closures={}).resolve(day, "AU").periods
 
 
 def test_calendar_trim_precedes_extra_closure(timeline: SessionTimeline) -> None:
@@ -257,10 +259,14 @@ def test_closed_day_still_validates_product_and_listing():
         CalendarDate.from_value(20250706).session("BZ")
 
 
-def test_exchange_closure_does_not_change_common_trade_date():
+def test_new_years_eve_is_not_a_trade_date():
     day = CalendarDate.from_value(20240209)
-    assert day.as_trade_date() == TradeDate(2024, 2, 9)
+    assert day.as_trade_date() is None
     assert day.session("AU").periods == ()
+    with pytest.raises(ValueError, match="非交易日"):
+        TradeDate(2024, 2, 9)
+    assert TradeDate(2024, 2, 8).next == TradeDate(2024, 2, 19)
+    assert TradeDate(2024, 2, 19).previous == TradeDate(2024, 2, 8)
 
 
 def test_trade_date_shift_boundaries():
